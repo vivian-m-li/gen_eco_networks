@@ -1,2 +1,7 @@
+# Packaging artifacts
+*.egg-info
+dist/
+build/
+
 .venv
-__pycache__
+__pycache__/
