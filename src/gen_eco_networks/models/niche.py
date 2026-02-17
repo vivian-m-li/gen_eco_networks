@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import networkx as nx
 
-from ecological_networks.base import EcologicalNetwork
+from gen_eco_networks.base import EcologicalNetwork
 
 
 @dataclass
