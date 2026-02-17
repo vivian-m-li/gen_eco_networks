@@ -5,7 +5,7 @@ Utilities for generating synthetic ecological networks using mechanistic food we
 
 Install directory from GitHub:
 
-`pip install git+https://github.com/vivian-m-li/synthetic-ecological-networks.git`
+`pip install git+https://github.com/vivian-m-li/gen_eco_networks.git`
 
 # Implemented Models
 
