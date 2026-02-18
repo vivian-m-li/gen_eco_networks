@@ -149,5 +149,37 @@ class EcologicalNetwork(ABC):
 
         return graph
 
+    def train_test_split(
+        self, graph: nx.DiGraph, test_size: float = 0.2
+    ) -> tuple[nx.DiGraph, nx.DiGraph]:
+        """
+        Split the directed edges into training and testing sets for link prediction.
+        TODO: differentiate between negative edges and unobserved edges, and sample negative edges for testing.
+
+        Returns
+        -------
+        train_subgraph : nx.DiGraph
+            A subgraph containing the training edges.
+            The subgraph contains (1 - test_size) * total_edges number of edges.
+        test_subgraph : nx.DiGraph
+            A subgraph containing the testing edges.
+            The subgraph contains test_size * total_edges number of edges.
+        """
+        edges = list(graph.edges())
+        self.rng.shuffle(edges)
+        split_idx = int(len(edges) * (1 - test_size))
+
+        train_edges = edges[:split_idx]
+        train_subgraph = nx.DiGraph()
+        train_subgraph.add_nodes_from(graph.nodes(data=True))
+        train_subgraph.add_edges_from(train_edges)
+
+        test_edges = edges[split_idx:]
+        test_subgraph = nx.DiGraph()
+        test_subgraph.add_nodes_from(graph.nodes(data=True))
+        test_subgraph.add_edges_from(test_edges)
+
+        return train_subgraph, test_subgraph
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(n_species={self.n_species})"
