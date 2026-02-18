@@ -2,10 +2,10 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 
-def draw_network(graph: nx.DiGraph) -> None:
+def draw_network(graph: nx.DiGraph, seed: int | None = None) -> None:
     """Draws a directed graph in a hierarchical layout."""
     levels = nx.trophic_levels(graph)
-    pos = nx.spring_layout(graph, seed=42)
+    pos = nx.spring_layout(graph, seed=seed)
     for node, level in levels.items():
         pos[node][1] = level  # set y-coordinate to trophic level
     plt.figure(figsize=(8, 6))

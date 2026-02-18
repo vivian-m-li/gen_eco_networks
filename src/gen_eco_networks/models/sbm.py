@@ -183,9 +183,9 @@ class SBM(EcologicalNetwork):
         for species in range(self.n_species):
             attributes: AttributeLookup = {}
             for i in range(self.n_binary_attributes):
-                attributes[f"binary_attr_{i}"] = self.rng.choice([0, 1])
+                attributes[f"binary_attr_{i}"] = int(self.rng.choice([0, 1]))
             for i in range(self.n_numeric_attributes):
-                attributes[f"numeric_attr_{i}"] = self.rng.uniform(0, 1)
+                attributes[f"numeric_attr_{i}"] = float(self.rng.uniform(0, 1))
             species_attributes[species] = attributes
         return species_attributes
 
