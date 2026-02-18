@@ -11,11 +11,24 @@ from dataclasses import dataclass, field
 
 import networkx as nx
 
-from gen_eco_networks.base import EcologicalNetwork
+from gen_eco_networks.base import EcologicalNetwork, NetworkParams
 
 
 @dataclass
-class NicheModelParams:
+class NicheModelParams(NetworkParams):
+    """
+    Parameters for the niche model.
+
+    Attributes
+    ----------
+    niche_values : dict[int, float]
+        Maps species ID to its niche value n_i in [0, 1].
+    range_values : dict[int, float]
+        Maps species ID to its feeding range r_i in [0, n_i].
+    center_values : dict[int, float]
+        Maps species ID to its feeding center c_i in [r_i/2, n_i].
+    """
+
     niche_values: dict[int, float] = field(default_factory=dict)
     range_values: dict[int, float] = field(default_factory=dict)
     center_values: dict[int, float] = field(default_factory=dict)
@@ -48,9 +61,13 @@ class NicheModel(EcologicalNetwork):
         graph : nx.DiGraph
             Directed graph where an edge (j -> i) indicates species i consumes
             species j.
+        params: NicheModelParams
+            The niche parameters used to generate the graph, including niche
+            values, feeding ranges, and feeding centers for each species.
         """
         params = self._initialize_params()
         graph = self._build_graph(params)
+        self.params = params
 
         # Replace problem species one at a time until all species are
         # connected and unique
@@ -61,7 +78,7 @@ class NicheModel(EcologicalNetwork):
             graph = self._build_graph(params)
             problem_species = self._get_problem_species(graph)
 
-        return graph
+        return graph, params
 
     def _beta_param(self) -> float:
         """Compute the beta distribution parameter B from connectance."""

@@ -10,6 +10,16 @@ import networkx as nx
 import numpy as np
 
 
+class NetworkParams:
+    """
+    Base class for parameters of ecological network models.
+
+    Specific models can extend this class to include additional parameters.
+    """
+
+    pass
+
+
 class EcologicalNetwork(ABC):
     """
     Abstract base class for ecological network generators.
@@ -37,7 +47,7 @@ class EcologicalNetwork(ABC):
         self.rng = np.random.default_rng(seed)
 
     @abstractmethod
-    def generate(self) -> nx.DiGraph:
+    def generate(self) -> tuple[nx.DiGraph, NetworkParams]:
         """
         Generate and return a network.
 
@@ -49,6 +59,9 @@ class EcologicalNetwork(ABC):
         nx.DiGraph
             The generated ecological network as a directed graph. Nodes are
             integer species IDs from 0 to n_species - 1.
+        NetworkParams
+            An instance of NetworkParams (or a subclass) containing the parameters
+            used to generate the network.
         """
         ...
 
