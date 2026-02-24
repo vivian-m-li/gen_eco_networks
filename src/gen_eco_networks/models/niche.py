@@ -11,7 +11,11 @@ from dataclasses import dataclass, field
 
 import networkx as nx
 
-from gen_eco_networks.base import EcologicalNetwork, NetworkParams
+from gen_eco_networks.base import (
+    EcologicalNetwork,
+    NetworkParams,
+    AttributeLookup,
+)
 
 
 @dataclass
@@ -36,9 +40,21 @@ class NicheModelParams(NetworkParams):
 
 class NicheModel(EcologicalNetwork):
     def __init__(
-        self, n_species: int, connectance: float, seed: int | None = None
+        self,
+        n_species: int,
+        connectance: float,
+        species_attributes: dict[int, AttributeLookup] | None = None,
+        n_binary_attributes: int = 0,
+        n_numeric_attributes: int = 0,
+        seed: int | None = None,
     ) -> None:
-        super().__init__(n_species, seed)
+        super().__init__(
+            n_species,
+            species_attributes,
+            n_binary_attributes,
+            n_numeric_attributes,
+            seed,
+        )
 
         if not (0 < connectance < 0.5):
             raise ValueError(

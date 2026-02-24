@@ -13,13 +13,14 @@ reverse direction (e.g. to capture trophic levels in food webs).
 
 import itertools
 from dataclasses import dataclass, field
-from typing import TypeAlias, Union
 
 import networkx as nx
 
-from gen_eco_networks.base import EcologicalNetwork, NetworkParams
-
-AttributeLookup: TypeAlias = dict[str, Union[int, float]]
+from gen_eco_networks.base import (
+    EcologicalNetwork,
+    NetworkParams,
+    AttributeLookup,
+)
 
 
 @dataclass
@@ -29,10 +30,6 @@ class SBMParams(NetworkParams):
 
     Attributes
     ----------
-    attribute_values : dict[int, AttributeLookup]
-        Attribute values for each species. Keys are species IDs, values are
-        dictionaries mapping attribute names to their (scaled) values.
-        Attributes can be binary (0 or 1) or numeric (float).
     block_sizes : list[int]
         Number of species in each block. Must sum to n_species.
     block_probabilities : list[list[float]]
@@ -42,7 +39,6 @@ class SBMParams(NetworkParams):
         Mapping from species ID to its assigned block ID.
     """
 
-    attribute_values: dict[int, AttributeLookup] = field(default_factory=dict)
     block_sizes: list[int] = field(default_factory=list)
     block_probabilities: list[list[float]] = field(default_factory=list)
     block_assignments: dict[int, int] = field(default_factory=dict)
@@ -63,16 +59,6 @@ class SBM(EcologicalNetwork):
         Number of species in the network.
     n_blocks : int
         Number of blocks (communities) to partition species into.
-    n_binary_attributes : int, optional
-        Number of binary (0/1) attributes to generate per species.
-        Default is 0.
-    n_numeric_attributes : int, optional
-        Number of continuous [0,1] attributes to generate per species.
-        Default is 0.
-    species_attributes : dict[int, AttributeLookup], optional
-        Pre-specified attributes. If provided, n_species, n_binary_attributes,
-        and n_numeric_attributes are ignored. Keys are species IDs, values are
-        dicts mapping attribute names to numeric values.
     block_sizes : list[int], optional
         Sizes of each block. Must sum to n_species. If None, blocks are
         assigned uniformly at random.
@@ -91,35 +77,22 @@ class SBM(EcologicalNetwork):
     def __init__(
         self,
         n_species: int | None = None,
-        n_blocks: int = 3,
+        species_attributes: dict[int, AttributeLookup] | None = None,
         n_binary_attributes: int = 0,
         n_numeric_attributes: int = 0,
-        species_attributes: dict[int, AttributeLookup] | None = None,
+        n_blocks: int = 3,
         block_sizes: list[int] | None = None,
         block_probabilities: list[list[float]] | None = None,
         reciprocal_proportion: float = 0.1,
         seed: int | None = None,
     ) -> None:
-        if species_attributes is not None:
-            n_species = len(species_attributes)
-            self.species_attributes = species_attributes
-            self.n_binary_attributes = 0
-            self.n_numeric_attributes = 0
-        else:
-            if n_species is None:
-                raise ValueError(
-                    "Must provide either species_attributes or n_species"
-                )
-            if n_binary_attributes == 0 and n_numeric_attributes == 0:
-                raise ValueError(
-                    "Must provide at least one of n_binary_attributes or "
-                    "n_numeric_attributes when species_attributes is not provided"
-                )
-            self.species_attributes = None
-            self.n_binary_attributes = n_binary_attributes
-            self.n_numeric_attributes = n_numeric_attributes
-
-        super().__init__(n_species, seed)
+        super().__init__(
+            n_species,
+            species_attributes,
+            n_binary_attributes,
+            n_numeric_attributes,
+            seed,
+        )
 
         if n_blocks <= 0:
             raise ValueError(f"n_blocks must be positive, got {n_blocks}.")
@@ -165,96 +138,6 @@ class SBM(EcologicalNetwork):
         graph = self._build_graph(params)
         self.params = params
         return graph, params
-
-    def _generate_random_attributes(self) -> dict[int, AttributeLookup]:
-        """
-        Generate random attributes for species.
-
-        Binary attributes are assigned with equal probability of being 0 or 1.
-        Numeric attributes are assigned uniformly from [0, 1].
-
-        Returns
-        -------
-        dict[int, AttributeLookup]
-            A dictionary mapping species IDs to their attributes.
-            Attribute keys are of the form "binary_attr_i" or "numeric_attr_i".
-        """
-        species_attributes: dict[int, AttributeLookup] = {}
-        for species in range(self.n_species):
-            attributes: AttributeLookup = {}
-            for i in range(self.n_binary_attributes):
-                attributes[f"binary_attr_{i}"] = int(self.rng.choice([0, 1]))
-            for i in range(self.n_numeric_attributes):
-                attributes[f"numeric_attr_{i}"] = float(self.rng.uniform(0, 1))
-            species_attributes[species] = attributes
-        return species_attributes
-
-    def _min_max_scaling(
-        self, attributes: dict[int, AttributeLookup]
-    ) -> dict[int, AttributeLookup]:
-        """
-        Apply min-max scaling to numeric attributes across all species.
-        For each attribute, scales values to [0, 1]. If all species have the
-        same value for an attribute, that attribute is set to 1.0 for all species.
-
-        Parameters
-        ----------
-        attributes : dict[int, AttributeLookup]
-            Raw attribute values.
-
-        Returns
-        -------
-        dict[int, AttributeLookup]
-            Scaled attribute values.
-        """
-        attribute_names = set(
-            name
-            for species_attrs in attributes.values()
-            for name in species_attrs.keys()
-        )
-
-        scaled_attributes: dict[int, AttributeLookup] = {
-            species: attrs.copy() for species, attrs in attributes.items()
-        }
-
-        for attr_name in attribute_names:
-            species_with_attr = [
-                species
-                for species in attributes
-                if attr_name in attributes[species]
-            ]
-            values = [
-                attributes[species][attr_name] for species in species_with_attr
-            ]
-
-            if not isinstance(values[0], (int, float)):
-                continue  # skip non-numeric attributes
-
-            max_val = max(values)
-            min_val = min(values)
-
-            # scale each species' value
-            for species in species_with_attr:
-                if max_val == min_val:
-                    scaled_attributes[species][attr_name] = 1.0
-                else:
-                    raw_value = attributes[species][attr_name]
-                    scaled_attributes[species][attr_name] = round(
-                        (raw_value - min_val) / (max_val - min_val), 3
-                    )
-
-        return scaled_attributes
-
-    def _assign_attributes(self) -> None:
-        """
-        Assign attributes to species in the generated graph.
-
-        Modifies params.species_attributes in place.
-        """
-        if self.species_attributes is not None:
-            return
-        attributes = self._generate_random_attributes()
-        self.species_attributes = attributes
 
     def _generate_block_sizes(self) -> list[int]:
         """
@@ -314,10 +197,10 @@ class SBM(EcologicalNetwork):
 
         # attributes
         if self.species_attributes is None:
-            raw_attributes = self._generate_random_attributes()
+            raw_attributes = self.generate_random_attributes()
         else:
             raw_attributes = self.species_attributes
-        params.attribute_values = self._min_max_scaling(raw_attributes)
+        params.attribute_values = self.min_max_scaling(raw_attributes)
 
         # block structure
         if self.block_sizes is None:

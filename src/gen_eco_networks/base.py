@@ -5,21 +5,33 @@ All network models inherit from EcologicalNetwork and must implement the generat
 """
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import TypeAlias, Union
 
 import os
 import networkx as nx
 import numpy as np
 import pandas as pd
 
+AttributeLookup: TypeAlias = dict[str, Union[int, float]]
 
+
+@dataclass
 class NetworkParams:
     """
     Base class for parameters of ecological network models.
-
     Specific models can extend this class to include additional parameters.
+
+    Attributes
+    ----------
+    attribute_values : dict[int, AttributeLookup]
+        Attribute values for each species. Keys are species IDs, values are
+        dictionaries mapping attribute names to their (scaled) values.
+        Attributes can be binary (0 or 1) or numeric (float).
+
     """
 
-    pass
+    attribute_values: dict[int, AttributeLookup] = field(default_factory=dict)
 
 
 class EcologicalNetwork(ABC):
@@ -30,23 +42,47 @@ class EcologicalNetwork(ABC):
     ----------
     n_species : int
         Number of species (nodes) in the network. Must be >= 2.
+    species_attributes : dict[int, AttributeLookup], optional
+        Pre-specified attributes. If provided, n_species, n_binary_attributes,
+        and n_numeric_attributes are ignored. Keys are species IDs, values are
+        dicts mapping attribute names to numeric values.
+    n_binary_attributes : int, optional
+        Number of binary (0/1) attributes to generate per species.
+        Default is 0.
+    n_numeric_attributes : int, optional
+        Number of continuous [0,1] attributes to generate per species.
+        Default is 0.
     seed : int or None, optional
         Seed for the random number generator. Pass an integer for
         reproducible results, or None for a random seed (default).
-
-    Attributes
-    ----------
-    n_species : int
-        Number of species in the network.
-    rng : numpy.random.Generator
-        The seeded random number generator.
     """
 
-    def __init__(self, n_species: int, seed: int | None = None) -> None:
+    def __init__(
+        self,
+        n_species: int,
+        species_attributes: dict[int, AttributeLookup] | None = None,
+        n_binary_attributes: int = 0,
+        n_numeric_attributes: int = 0,
+        seed: int | None = None,
+    ) -> None:
         if n_species < 2:
             raise ValueError(f"n_species must be >= 2, got {n_species}")
         self.n_species = n_species
         self.rng = np.random.default_rng(seed)
+
+        if species_attributes is not None:
+            n_species = len(species_attributes)
+            self.species_attributes = species_attributes
+            self.n_binary_attributes = 0
+            self.n_numeric_attributes = 0
+        else:
+            if n_species is None:
+                raise ValueError(
+                    "Must provide either species_attributes or n_species"
+                )
+            self.species_attributes = None
+            self.n_binary_attributes = n_binary_attributes
+            self.n_numeric_attributes = n_numeric_attributes
 
     @abstractmethod
     def generate(self) -> tuple[nx.DiGraph, NetworkParams]:
@@ -66,6 +102,85 @@ class EcologicalNetwork(ABC):
             used to generate the network.
         """
         ...
+
+    def generate_random_attributes(self) -> dict[int, AttributeLookup]:
+        """
+        Generate random attributes for species.
+
+        Binary attributes are assigned with equal probability of being 0 or 1.
+        Numeric attributes are assigned uniformly from [0, 1].
+
+        Returns
+        -------
+        dict[int, AttributeLookup]
+            A dictionary mapping species IDs to their attributes.
+            Attribute keys are of the form "binary_attr_i" or "numeric_attr_i".
+        """
+        species_attributes: dict[int, AttributeLookup] = {}
+        for species in range(self.n_species):
+            attributes: AttributeLookup = {}
+            for i in range(self.n_binary_attributes):
+                attributes[f"binary_attr_{i}"] = int(self.rng.choice([0, 1]))
+            for i in range(self.n_numeric_attributes):
+                attributes[f"numeric_attr_{i}"] = float(self.rng.uniform(0, 1))
+            species_attributes[species] = attributes
+        return species_attributes
+
+    def min_max_scaling(
+        self, attributes: dict[int, AttributeLookup]
+    ) -> dict[int, AttributeLookup]:
+        """
+        Apply min-max scaling to numeric attributes across all species.
+        For each attribute, scales values to [0, 1]. If all species have the
+        same value for an attribute, that attribute is set to 1.0 for all species.
+
+        Parameters
+        ----------
+        attributes : dict[int, AttributeLookup]
+            Raw attribute values.
+
+        Returns
+        -------
+        dict[int, AttributeLookup]
+            Scaled attribute values.
+        """
+        attribute_names = set(
+            name
+            for species_attrs in attributes.values()
+            for name in species_attrs.keys()
+        )
+
+        scaled_attributes: dict[int, AttributeLookup] = {
+            species: attrs.copy() for species, attrs in attributes.items()
+        }
+
+        for attr_name in attribute_names:
+            species_with_attr = [
+                species
+                for species in attributes
+                if attr_name in attributes[species]
+            ]
+            values = [
+                attributes[species][attr_name] for species in species_with_attr
+            ]
+
+            if not isinstance(values[0], (int, float)):
+                continue  # skip non-numeric attributes
+
+            max_val = max(values)
+            min_val = min(values)
+
+            # scale each species' value
+            for species in species_with_attr:
+                if max_val == min_val:
+                    scaled_attributes[species][attr_name] = 1.0
+                else:
+                    raw_value = attributes[species][attr_name]
+                    scaled_attributes[species][attr_name] = round(
+                        (raw_value - min_val) / (max_val - min_val), 3
+                    )
+
+        return scaled_attributes
 
     def _write_nodes(self, graph: nx.DiGraph, file: str) -> None:
         """Write nodes to a file."""
