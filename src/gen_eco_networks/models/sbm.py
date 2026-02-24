@@ -260,6 +260,6 @@ class SBM(EcologicalNetwork):
 
     def __repr__(self) -> str:
         return (
-            f"SBMModel(n_species={self.n_species}, n_blocks={self.n_blocks}, "
+            f"SBM(n_species={self.n_species}, n_blocks={self.n_blocks}, "
             f"reciprocal_proportion={self.reciprocal_proportion})"
         )
