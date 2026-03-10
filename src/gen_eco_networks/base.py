@@ -103,7 +103,26 @@ class EcologicalNetwork(ABC):
         """
         ...
 
-    def generate_random_attributes(self) -> dict[int, AttributeLookup]:
+    def initialize_attribute_params(
+        self, species_attributes: dict[int, AttributeLookup] | None
+    ) -> dict[int, AttributeLookup]:
+        """
+        Initialize attribute parameters for the model and apply min-max scaling to numeric attributes.
+        """
+        if species_attributes is None:
+            raw_attributes = self._generate_random_attributes()
+        else:
+            raw_attributes = species_attributes
+        attribute_values = self._min_max_scaling(raw_attributes)
+        return attribute_values
+
+    def set_node_attributes(
+        self, graph: nx.DiGraph, attributes: dict[int, AttributeLookup]
+    ) -> None:
+        """Set node attributes in the graph in-place."""
+        nx.set_node_attributes(graph, attributes)
+
+    def _generate_random_attributes(self) -> dict[int, AttributeLookup]:
         """
         Generate random attributes for species.
 
@@ -126,7 +145,7 @@ class EcologicalNetwork(ABC):
             species_attributes[species] = attributes
         return species_attributes
 
-    def min_max_scaling(
+    def _min_max_scaling(
         self, attributes: dict[int, AttributeLookup]
     ) -> dict[int, AttributeLookup]:
         """

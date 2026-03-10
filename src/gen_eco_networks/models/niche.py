@@ -138,6 +138,9 @@ class NicheModel(EcologicalNetwork):
     def _initialize_params(self) -> NicheModelParams:
         """Initialize niche parameters for all species."""
         params = NicheModelParams()
+        params.attribute_values = self.initialize_attribute_params(
+            self.species_attributes
+        )
         for i in range(self.n_species):
             ni, ri, ci = self._draw_species_params()
             params.niche_values[i] = ni
@@ -156,6 +159,7 @@ class NicheModel(EcologicalNetwork):
         """
         graph = nx.DiGraph()
         graph.add_nodes_from(range(self.n_species))
+        self.set_node_attributes(graph, params.attribute_values)
 
         for i in range(self.n_species):
             lower = params.center_values[i] - params.range_values[i] / 2

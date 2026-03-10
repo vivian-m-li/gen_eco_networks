@@ -96,14 +96,9 @@ class RGG(EcologicalNetwork):
     def _initialize_params(self) -> RGGParams:
         """Initialize all model parameters."""
         params = RGGParams()
-
-        # attributes
-        if self.species_attributes is None:
-            raw_attributes = self.generate_random_attributes()
-        else:
-            raw_attributes = self.species_attributes
-        params.attribute_values = self.min_max_scaling(raw_attributes)
-
+        params.attribute_values = self.initialize_attribute_params(
+            self.species_attributes
+        )
         params.radius = self.radius
         params.assortative = self.assortative
         return params
@@ -136,7 +131,7 @@ class RGG(EcologicalNetwork):
         graph.add_nodes_from(range(self.n_species))
 
         # store attribute values as node attributes
-        nx.set_node_attributes(graph, params.attribute_values)
+        self.set_node_attributes(graph, params.attribute_values)
 
         for i in range(self.n_species):
             for j in range(i + 1, self.n_species):

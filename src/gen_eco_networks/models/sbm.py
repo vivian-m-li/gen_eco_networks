@@ -196,11 +196,9 @@ class SBM(EcologicalNetwork):
         params = SBMParams()
 
         # attributes
-        if self.species_attributes is None:
-            raw_attributes = self.generate_random_attributes()
-        else:
-            raw_attributes = self.species_attributes
-        params.attribute_values = self.min_max_scaling(raw_attributes)
+        params.attribute_values = self.initialize_attribute_params(
+            self.species_attributes
+        )
 
         # block structure
         if self.block_sizes is None:
@@ -230,7 +228,7 @@ class SBM(EcologicalNetwork):
         graph.add_nodes_from(range(self.n_species))
 
         # store attribute values as node attributes
-        nx.set_node_attributes(graph, params.attribute_values)
+        self.set_node_attributes(graph, params.attribute_values)
 
         # store block assignments
         nx.set_node_attributes(graph, params.block_assignments, name="block")
