@@ -65,7 +65,7 @@ class NicheModel(EcologicalNetwork):
         self.connectance = connectance
         self.params: NicheModelParams | None = None
 
-    def generate(self) -> nx.DiGraph:
+    def generate(self, max_iterations: int = 10000) -> nx.DiGraph:
         """
         Generate a food web using the niche model.
 
@@ -88,11 +88,19 @@ class NicheModel(EcologicalNetwork):
         # Replace problem species one at a time until all species are
         # connected and unique
         problem_species = self._get_problem_species(graph)
+        iterations = 0
         while problem_species:
+            if iterations >= max_iterations:
+                raise RuntimeError(
+                    f"generate() did not converge after {max_iterations} iterations. "
+                    f"{len(problem_species)} problem species remain: {problem_species}. "
+                )
+
             species_to_replace = problem_species[0]
             self._reassign_species(params, species_to_replace)
             graph = self._build_graph(params)
             problem_species = self._get_problem_species(graph)
+            iterations += 1
 
         return graph, params
 
@@ -206,6 +214,31 @@ class NicheModel(EcologicalNetwork):
 
         return to_replace
 
+    def _find_unconnected_to_basal_species(
+        self, graph: nx.DiGraph
+    ) -> list[int]:
+        """
+        Identify species that are not connected to any basal species.
+
+        A species is considered unconnected to basal if there is no directed path
+        from any basal species (species with in-degree 0) to it. This means the
+        species cannot be part of any energy flow originating from a basal species,
+        which is ecologically unrealistic.
+
+        Returns
+        -------
+        list[int]
+            Species IDs that are unconnected to any basal species.
+        """
+        basal_species = [n for n, d in graph.in_degree() if d == 0]
+        unconnected = []
+        for node in graph.nodes():
+            if not any(
+                nx.has_path(graph, basal, node) for basal in basal_species
+            ):
+                unconnected.append(node)
+        return unconnected
+
     def _get_problem_species(self, graph: nx.DiGraph) -> list[int]:
         """
         Return a list of species IDs that need to be replaced.
@@ -218,11 +251,12 @@ class NicheModel(EcologicalNetwork):
         """
         isolates = list(nx.isolates(graph))
         trophic_identical = self._find_trophically_identical_species(graph)
+        unconnected_to_basal = self._find_unconnected_to_basal_species(graph)
 
         # combine isolates and trophic_identical while preserving order
         problem_species = []
         seen = set()
-        for species in isolates + trophic_identical:
+        for species in isolates + trophic_identical + unconnected_to_basal:
             if species not in seen:
                 seen.add(species)
                 problem_species.append(species)
