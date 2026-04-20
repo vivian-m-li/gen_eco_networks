@@ -6,6 +6,7 @@ All network models inherit from EcologicalNetwork and must implement the generat
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import pickle
 from typing import TypeAlias, Union
 
 import os
@@ -117,10 +118,10 @@ class EcologicalNetwork(ABC):
         return attribute_values
 
     def set_node_attributes(
-        self, graph: nx.DiGraph, attributes: dict[int, AttributeLookup]
+        self, G: nx.DiGraph, attributes: dict[int, AttributeLookup]
     ) -> None:
         """Set node attributes in the graph in-place."""
-        nx.set_node_attributes(graph, attributes)
+        nx.set_node_attributes(G, attributes)
 
     def _generate_random_attributes(self) -> dict[int, AttributeLookup]:
         """
@@ -201,23 +202,23 @@ class EcologicalNetwork(ABC):
 
         return scaled_attributes
 
-    def _write_nodes(self, graph: nx.DiGraph, file: str) -> None:
+    def _write_nodes(self, G: nx.DiGraph, file: str) -> None:
         """Write nodes to a file."""
         with open(file, "w") as f:
             f.write("species_id\n")
-            for node_id in graph.nodes():
+            for node_id in G.nodes():
                 f.write(f"{node_id}\n")
 
-    def _write_edgelist(self, graph: nx.DiGraph, file: str) -> None:
+    def _write_edgelist(self, G: nx.DiGraph, file: str) -> None:
         """Write edges to a file."""
-        nx.write_edgelist(graph, file, data=False)
+        nx.write_edgelist(G, file, data=False)
 
-    def _write_attributes(self, graph: nx.DiGraph, file: str) -> None:
+    def _write_attributes(self, G: nx.DiGraph, file: str) -> None:
         """
         Write node attributes to a file. If no nodes have attributes, then
         no file is written.
         """
-        species_attributes = graph.nodes(data=True)
+        species_attributes = G.nodes(data=True)
         attribute_keys = set()
         for attr in dict(species_attributes).values():
             attribute_keys.update(attr.keys())
@@ -225,7 +226,7 @@ class EcologicalNetwork(ABC):
         if len(attribute_keys) == 0:
             return  # no attributes to write
 
-        species_ids = set(graph.nodes())
+        species_ids = set(G.nodes())
         with open(file, "w") as f:
             f.write(f"species_id,{','.join(attribute_keys)}\n")
             for species_id in species_ids:
@@ -235,32 +236,50 @@ class EcologicalNetwork(ABC):
                 ]
                 f.write(f"{species_id},{','.join(attribute_values)}\n")
 
-    def save(self, graph: nx.DiGraph, dir: str, gml: bool = True) -> None:
-        """Write the generated web to node, edge, and attribute files."""
+    def save(self, G: nx.DiGraph, dir: str, format: str = "pkl") -> None:
+        """
+        Write the generated web to node, edge, and attribute files.
+
+        Accepted formats:
+        - pkl (writes graph.pkl) - Default
+        - gml (writes graph.gml)
+        - csv (writes nodes.txt, edges.txt, attributes.txt)
+        """
 
         if not os.path.isdir(dir):
             os.makedirs(dir)
 
-        if gml:
+        if format == "gml":
             nx.write_gml(
-                nx.relabel_nodes(graph, str), os.path.join(dir, "graph.gml")
+                nx.relabel_nodes(G, str), os.path.join(dir, "graph.gml")
             )
+        elif format == "csv":
+            self._write_nodes(G, os.path.join(dir, "nodes.txt"))
+            self._write_edgelist(G, os.path.join(dir, "edges.txt"))
+            self._write_attributes(G, os.path.join(dir, "attributes.txt"))
         else:
-            self._write_nodes(graph, os.path.join(dir, "nodes.txt"))
-            self._write_edgelist(graph, os.path.join(dir, "edges.txt"))
-            self._write_attributes(graph, os.path.join(dir, "attributes.txt"))
+            # defaults to pickle
+            with open(os.path.join(dir, "graph.pkl"), "wb") as f:
+                pickle.dump(G, f, pickle.HIGHEST_PROTOCOL)
 
-    def read(self, dir: str, gml: bool = True) -> nx.DiGraph:
+    def read(self, dir: str, format: str = "pkl") -> nx.DiGraph:
         """
         Read a web from files and return the graph.
         Files must be named "nodes.txt", "edges.txt", and "attributes.txt"
-        if gml=False, or "graph.gml" if gml=True.
+        if format = "csv", or "graph.gml" if format = "gml", or "graph.pkl" if
+        format = "pkl".
         """
-        if gml:
+
+        if format == "pkl":
+            with open(os.path.join(dir, "graph.pkl"), "rb") as f:
+                return pickle.load(f)
+        elif format == "gml":
             return nx.read_gml(os.path.join(dir, "graph.gml"), label="id")
 
+        # else: read in csv format
+
         # read in edges first
-        graph = nx.read_edgelist(
+        G = nx.read_edgelist(
             os.path.join(dir, "edges.txt"), create_using=nx.DiGraph
         )
 
@@ -269,8 +288,8 @@ class EcologicalNetwork(ABC):
             next(f)  # skip header
             for line in f:
                 node_id = line.strip()
-                if node_id not in graph:
-                    graph.add_node(node_id)
+                if node_id not in G:
+                    G.add_node(node_id)
 
         # add node attributes
         if os.path.exists(os.path.join(dir, "attributes.txt")):
@@ -279,12 +298,12 @@ class EcologicalNetwork(ABC):
             for _, row in df.iterrows():
                 species_id = str(int(row["species_id"]))
                 for attr in attributes:
-                    graph.nodes[species_id][attr] = float(row[attr])
+                    G.nodes[species_id][attr] = float(row[attr])
 
-        return graph
+        return G
 
     def train_test_split(
-        self, graph: nx.DiGraph, test_size: float = 0.2
+        self, G: nx.DiGraph, test_size: float = 0.2
     ) -> tuple[nx.DiGraph, nx.DiGraph]:
         """
         Split the directed edges into training and testing sets for link prediction.
@@ -299,18 +318,18 @@ class EcologicalNetwork(ABC):
             A subgraph containing the testing edges.
             The subgraph contains test_size * total_edges number of edges.
         """
-        edges = list(graph.edges())
+        edges = list(G.edges())
         self.rng.shuffle(edges)
         split_idx = int(len(edges) * (1 - test_size))
 
         train_edges = edges[:split_idx]
         train_subgraph = nx.DiGraph()
-        train_subgraph.add_nodes_from(graph.nodes(data=True))
+        train_subgraph.add_nodes_from(G.nodes(data=True))
         train_subgraph.add_edges_from(train_edges)
 
         test_edges = edges[split_idx:]
         test_subgraph = nx.DiGraph()
-        test_subgraph.add_nodes_from(graph.nodes(data=True))
+        test_subgraph.add_nodes_from(G.nodes(data=True))
         test_subgraph.add_edges_from(test_edges)
 
         return train_subgraph, test_subgraph
