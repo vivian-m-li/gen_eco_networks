@@ -1,5 +1,9 @@
 """
 Probabilistic niche model for food web generation.
+
+The probabilistic niche model extends the niche model, where each species is assigned a niche value, a feeding center, and a feeding range. However, the PNM produces niches that are high probability and highly contiguous in the center of the feeding range and low probability and more fragmented toward the margins, rather than uniform low probability throughout the feeding range.
+
+This implementation also correlates the niche value (n_i) and the feeding center (c_i) of each species based on the correlation coefficient (rho). This allows for more flexible generation of food webs with different structural properties. The magnitude of rho dictates how correlated (vs. random) n_i and c_i are, while the sign of rho dictates the direction of c_i within its allowed range (i.e. if species tend to feed on other species with lower or higher niche values).
 """
 
 from gen_eco_networks.models.niche import NicheModel
@@ -13,8 +17,7 @@ class ProbabilisticNicheModel(NicheModel):
     ----------
     rho : float
         Correlation between n_i and c_i. Must be in [-1, 1]. A value of 0 means
-        no correlation, while values close to 1 or -1 induce strong positive or
-        negative correlation, respectively.
+        no correlation, while values close to 1 or -1 induce strong correlation. Positive values of rho will bias c_i towards the upper bound of its valid range (i.e. species tend to feed on others with higher niche values), while negative values will bias c_i towards the lower bound (i.e. species tend to feed on others with lower niche values).
     **kwargs
         All other arguments are forwarded to NicheModel.
     """
