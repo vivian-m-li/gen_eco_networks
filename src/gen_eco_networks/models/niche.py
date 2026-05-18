@@ -39,6 +39,22 @@ class NicheModelParams(NetworkParams):
 
 
 class NicheModel(EcologicalNetwork):
+    """
+    Niche model for generating food webs.
+
+    Parameters (not included in EcologicalNetwork base class)
+    ----------
+    connectance : float
+        Desired connectance of the generated food web, defined as the proportion
+        of possible links that are realized.
+    attribute_correlation_sigma : float | None
+        If not None, then generated species attributes will be correlated with
+        their niche parameters (n_i, r_i, c_i) using a normal distribution. This
+        parameter controls the strength of the correlation. sigma=0 means a
+        perfect correlation, while higher sigma means weaker correlation.
+        If None, then generated attributes will be completely random.
+    """
+
     def __init__(
         self,
         n_species: int,
@@ -46,6 +62,7 @@ class NicheModel(EcologicalNetwork):
         species_attributes: dict[int, AttributeLookup] | None = None,
         n_binary_attributes: int = 0,
         n_numeric_attributes: int = 0,
+        attribute_correlation_sigma: float | None = None,
         seed: int | None = None,
     ) -> None:
         super().__init__(
@@ -63,6 +80,7 @@ class NicheModel(EcologicalNetwork):
             )
 
         self.connectance = connectance
+        self.attribute_correlation_sigma = attribute_correlation_sigma
         self.params: NicheModelParams | None = None
 
     def generate(self, max_iterations: int = 10000) -> nx.DiGraph:
@@ -146,14 +164,29 @@ class NicheModel(EcologicalNetwork):
     def _initialize_params(self) -> NicheModelParams:
         """Initialize niche parameters for all species."""
         params = NicheModelParams()
-        params.attribute_values = self.initialize_attribute_params(
-            self.species_attributes
-        )
         for i in range(self.n_species):
             ni, ri, ci = self._draw_species_params()
             params.niche_values[i] = ni
             params.range_values[i] = ri
             params.center_values[i] = ci
+
+        if self.attribute_correlation_sigma is None:
+            corr = None
+        else:
+            # correlate generated attributes with niche parameters
+            corr = {
+                i: [
+                    params.niche_values[i],
+                    params.range_values[i],
+                    params.center_values[i],
+                ]
+                for i in range(self.n_species)
+            }
+
+        params.attribute_values = self.initialize_attribute_params(
+            self.species_attributes, corr, self.attribute_correlation_sigma
+        )
+
         self._assign_basal(params)
         return params
 

@@ -13,6 +13,7 @@ import os
 import networkx as nx
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 
 AttributeLookup: TypeAlias = dict[str, Union[int, float]]
 
@@ -105,13 +106,20 @@ class EcologicalNetwork(ABC):
         ...
 
     def initialize_attribute_params(
-        self, species_attributes: dict[int, AttributeLookup] | None
+        self,
+        species_attributes: dict[int, AttributeLookup] | None,
+        corr: dict[int, list] | None = None,
+        attribute_correlation_sigma: float = 0.0,
     ) -> dict[int, AttributeLookup]:
         """
         Initialize attribute parameters for the model and apply min-max scaling to numeric attributes.
         """
-        if species_attributes is None:
+        if species_attributes is None and corr is None:
             raw_attributes = self._generate_random_attributes()
+        elif species_attributes is None:
+            raw_attributes = self._generate_correlated_attributes(
+                corr, attribute_correlation_sigma
+            )
         else:
             raw_attributes = species_attributes
         attribute_values = self._min_max_scaling(raw_attributes)
@@ -123,7 +131,9 @@ class EcologicalNetwork(ABC):
         """Set node attributes in the graph in-place."""
         nx.set_node_attributes(G, attributes)
 
-    def _generate_random_attributes(self) -> dict[int, AttributeLookup]:
+    def _generate_random_attributes(
+        self,
+    ) -> dict[int, AttributeLookup]:
         """
         Generate random attributes for species.
 
@@ -143,6 +153,64 @@ class EcologicalNetwork(ABC):
                 attributes[f"binary_attr_{i}"] = int(self.rng.choice([0, 1]))
             for i in range(self.n_numeric_attributes):
                 attributes[f"numeric_attr_{i}"] = float(self.rng.uniform(0, 1))
+            species_attributes[species] = attributes
+        return species_attributes
+
+    def _generate_correlated_attributes(
+        self,
+        corr: dict[int, list],
+        sigma: float,
+    ) -> dict[int, AttributeLookup]:
+        """
+        Generate attributes for species that are correlated with the values in corr.
+
+        Parameters
+        ----------
+        corr : dict[int, list]
+            A dictionary mapping species IDs to lists of values that the
+            attributes should be correlated with.
+        sigma : float
+            Standard deviation of the normal distribution used to generate
+            attribute values around the species' correlation score. Higher sigma
+            means weaker correlation.
+
+        Returns
+        -------
+        dict[int, AttributeLookup]
+            A dictionary mapping species IDs to their attributes.
+            Attribute keys are of the form "binary_attr_i" or "numeric_attr_i".
+        """
+        # use the first component of a PCA on the values in corr to get a single score for each species that captures the correlation structure
+        values = np.array([corr[species] for species in range(self.n_species)])
+        pca = PCA(n_components=1)
+        pca.fit(values)
+        scores = {
+            species: pca.transform([corr[species]])[0][0]
+            for species in range(self.n_species)
+        }
+
+        # scale the scores to [0, 1] using min-max scaling
+        min_score = min(scores.values())
+        max_score = max(scores.values())
+        scaled_scores = {
+            species: (score - min_score) / (max_score - min_score)
+            for species, score in scores.items()
+        }
+
+        # generate attribute values for each species from a normal distribution
+        # for each species, mu = scaled_score, sigma = input sigma parameter (controls how strongly the attributes are correlated with the values in corr)
+        species_attributes: dict[int, AttributeLookup] = {}
+        for species in range(self.n_species):
+            score = scaled_scores[species]
+            attributes: AttributeLookup = {}
+            for i in range(self.n_binary_attributes):
+                attributes[f"binary_attr_{i}"] = round(
+                    np.random.normal(score, sigma)
+                )
+            for i in range(self.n_numeric_attributes):
+                attributes[f"numeric_attr_{i}"] = np.clip(
+                    np.random.normal(score, sigma), 0.0, 1.0
+                )
             species_attributes[species] = attributes
         return species_attributes
 
